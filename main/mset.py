@@ -53,7 +53,9 @@ while True:
 init = -1
 while True:
     try:
-        init = float(raw_input("Input seed: "))
+        init_r = float(raw_input("Input real component of seed: "))
+        init_c = float(raw_input("Input complex component of seed: "))
+        init = complex(init_r,init_c)
         break
     except ValueError:
         print("Invalid input, please try again.")
@@ -92,8 +94,9 @@ while True:
     except ValueError:
         print("Invalid input, please try again.")
 
-# color scheme?
+# color scheme prompt?
 
+# takes array input, performs operations based on chosen function, returns array
 def geom(func_str, z, c):
     if func_str == "z**2":
         np.multiply(z, z, z)
@@ -113,7 +116,7 @@ def geom(func_str, z, c):
         return z
     elif func_str == "log":
         np.multiply(z, c, z)
-        temp = np.zeros(z.shape, dtype = int)
+        temp = np.zeros(z.shape, dtype = complex)
         temp[temp==0] = 1
         np.subtract(temp,z,temp)
         np.multiply(z,temp,z)
@@ -163,10 +166,10 @@ def mandel(fn_str, f_name, seed = 0, juul = 0, res = (4000,4000), xrng = (-2.2,0
 
     m_arr[m_arr==0] = iter_max
 
-    img = py.imshow(m_arr.T, origin='lower left', cmap = 'binary')
+    img = py.imshow(m_arr.T, origin='lower left', cmap = 'jet')
     img.write_png(f_name, noscale=True)
 
-mandel(f_str, "mandel_render.png", res = (res_xy,res_xy), xrng = (x_0,x_1), yrng = (y_0,y_1), iter_max = iter_m)
+mandel(f_str, "mandel_render.png", seed = init, res = (res_xy,res_xy), xrng = (x_0,x_1), yrng = (y_0,y_1), iter_max = iter_m)
 
 '''
 
