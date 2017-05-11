@@ -1,10 +1,10 @@
 #!usr/bin/python
-from PIL import Image, ImageDraw
 import math, sys, cmath
 import numpy as np
 import pylab as py
-import imageio
+import multiprocessing
 import time
+import sys
 
 np.set_printoptions(threshold=np.nan) # allows for printing entire np arrays
 
@@ -12,6 +12,8 @@ path = "./"
 jules = False
 f_str = "z**2"
 esc_radius = 420.0
+bloc_n = 10
+spongebob = 'the krusty krab is unfair, mr krabs is in there, standing at concession, plotting his oppression!!'
 
 # prompt user for different options (function, seed, resolution, max iterations, etc.)
 
@@ -45,7 +47,7 @@ while True:
             val = "z**2"
             esc_radius = 2.0
         else:
-            val = int('the krusty krab is unfair, mr krabs is in there, standing at concession, plotting his oppression')
+            val = int(spongebob)
         break
     except ValueError:
         print("Invalid response, please try again.")
@@ -79,20 +81,44 @@ while True:
     try:
         iter_m = int(raw_input("Input max iterations: "))
         if iter_m < 1:
-            iter_m = int('the krusty krab is unfair, mr krabs is in there, standing at concession, plotting his oppression')
+            iter_m = int(spongebob)
         break
     except ValueError:
         print("Invalid input, please try again.")
 
 res_xy = -1
+print('Please choose from one of the following resolutions:\n'
+        '(1) 10x10\n'
+        '(2) 100x100\n'
+        '(3) 500x500\n'
+        '(4) 1000x1000\n'
+        '(5) 5000x5000\n'
+        '(6) 10000x10000\n'
+        '(7) 25000x25000')
 while True:
     try:
-        res_xy = int(raw_input("Input the number of pixels to render on an axis: "))
-        if res_xy < 1:
-            res_xy = int('the krusty krab is unfair, mr krabs is in there, standing at concession, plotting his oppression')
+        temp = int(raw_input("Choose a number corresponding with your intended option (1-7): "))
+        if temp == 7:
+            res_xy = 25000
+        elif temp == 6:
+            res_xy = 10000
+        elif temp == 5:
+            res_xy = 5000
+        elif temp == 4:
+            res_xy = 1000
+        elif temp == 3:
+            res_xy = 500
+        elif temp == 2:
+            res_xy = 100
+        elif temp == 1:
+            res_xy = 10
+        else:
+            val = int(spongebob)
         break
     except ValueError:
         print("Invalid input, please try again.")
+
+info = multiprocessing.get_logger().info # return_arr resxy thing was here may come back?
 
 # color scheme prompt?
 
@@ -117,24 +143,61 @@ def geom(func_str, z, c):
     elif func_str == "log":
         np.multiply(z, c, z)
         temp = np.zeros(z.shape, dtype = complex)
-        temp[temp==0] = 1
+        temp[temp==0] = 1 # TODO: may be able to just use (1-z)
         np.subtract(temp,z,temp)
         np.multiply(z,temp,z)
         return z
 
-# TODO: quantize R (x) and i (y) axes and create different boxes, calculating those, then combining the arrays and generating the image
-def mandel(fn_str, f_name, seed = 0, juul = 0, res = (4000,4000), xrng = (-2.2,0.8), yrng = (-1.5, 1.5), iter_max = 100):
+def blockshaped(arr, nrows, ncols):
+    """
+    Return an array of shape (n, nrows, ncols) where
+    n * nrows * ncols = arr.size
 
-    print "Initializing arrays..."
+    If arr is a 2D array, the returned array should look like n subblocks with
+    each subblock preserving the "physical" layout of arr.
+    """
+    h, w = arr.shape
+    return (arr.reshape(h//nrows, nrows, -1, ncols)
+               .swapaxes(1,2)
+               .reshape(-1, nrows, ncols))
+
+def unblockshaped(arr, h, w):
+    """
+    Return an array of shape (h, w) where
+    h * w = arr.size
+
+    If arr is of shape (n, nrows, ncols), n sublocks of shape (nrows, ncols),
+    then the returned array preserves the "physical" layout of the sublocks.
+    """
+    n, nrows, ncols = arr.shape
+    return (arr.reshape(h//nrows, -1, nrows, ncols)
+               .swapaxes(1,2)
+               .reshape(h, w))
+
+# handle parallel processes
+def proc_handler(fn_str, f_name, seed, juul, iter_max, blocs, arr):
+    pool = multiprocessing.Pool(processes=(multiprocessing.cpu_count()*2))
+    data = []
+
+    i = 0
+    for bloc in blocs:
+        data.append((i, bloc, fn_str, f_name, seed, juul, iter_max))
+        i += 1
+
+    results = pool.map(proc, data)
+
+    del bloc, data # save some memory
+
+    for result in results:
+        arr[result[1]] = result[0]
+
+    return arr
+
+def proc((procnum, c, fn_str, f_name, seed, juul, iter_max)):
+
+    res = c.shape
 
     gx, gy = np.mgrid[0:res[0], 0:res[1]] # make grid
-    x = np.linspace(xrng[0], xrng[1], res[0])[gx]
-    y = np.linspace(yrng[0], yrng[1], res[1])[gy]
-    c = x+complex(0,1)*y # make complex grid
-
-    print "Clearing memory..."
-
-    del x, y # save some memory
 
     m_arr = np.zeros(c.shape, dtype = int) # initialize mandelbrot array
 
@@ -148,8 +211,7 @@ def mandel(fn_str, f_name, seed = 0, juul = 0, res = (4000,4000), xrng = (-2.2,0
 
     z = geom(fn_str, zinit, c) # initial iteration
 
-    print "Running..."
-    start = time.time()
+    del zinit # save some memory
 
     for i in xrange(iter_max):
         if not len(z): break
@@ -161,18 +223,68 @@ def mandel(fn_str, f_name, seed = 0, juul = 0, res = (4000,4000), xrng = (-2.2,0
         gx, gy = gx[rem], gy[rem]
         c = c[rem]
 
-    print 'Time taken:', time.time()-start
-    print "Generating PNG..."
+    del gx, gy, c # save some memory
 
     m_arr[m_arr==0] = iter_max
+
+    result = (m_arr, procnum)
+
+    del m_arr # save some memory
+
+    return result
+
+def mandel(fn_str, f_name, seed = 0, juul = 0, res = (4000,4000), xrng = (-2.2,0.8), yrng = (-1.5, 1.5), iter_max = 100):
+
+    print "Initializing arrays..."
+
+    gx, gy = np.mgrid[0:res[0], 0:res[1]] # make grid
+    x = np.linspace(xrng[0], xrng[1], res[0])[gx]
+    y = np.linspace(yrng[0], yrng[1], res[1])[gy]
+    c = x+complex(0,1)*y # make complex grid
+
+    print "Clearing memory..."
+
+    del x, y, gx, gy # save some memory
+
+    res_x = int(float(res[0]) / bloc_n)
+    res_y = int(float(res[1]) / bloc_n)
+
+    blocs = blockshaped(c, res_x, res_y)
+
+    del c # save some memory
+
+    return_arr = np.zeros(blocs.shape, dtype = int)
+
+    print "Running..."
+    start = time.time()
+
+    # quantize R (x) and i (y) axes and create different boxes, calculating those in parallel, then recombining the arrays and generating the image
+    proc_handler(fn_str, f_name, seed, juul, iter_max, blocs, return_arr)
+
+    del blocs # save some memory
+
+    m_arr = unblockshaped(return_arr, res[0], res[1])
+
+    print 'Time taken:', time.time()-start
+    print "Generating PNG..."
 
     img = py.imshow(m_arr.T, origin='lower left', cmap = 'jet')
     img.write_png(f_name, noscale=True)
 
-mandel(f_str, "mandel_render.png", seed = init, res = (res_xy,res_xy), xrng = (x_0,x_1), yrng = (y_0,y_1), iter_max = iter_m)
+    m_arr = None
+
+if __name__ == '__main__':
+    mandel(f_str, "mandel_render.png", seed = init, res = (res_xy,res_xy), xrng = (x_0,x_1), yrng = (y_0,y_1), iter_max = iter_m)
 
 '''
 
-- maintain list of scales, domains, ranges, escape radii, suggested iteration limits, etc.
+medium/long term:
+- while figuring out multithreading/processing and optimizing speed, work on 3d modeling of various Mandelbrot/Julia sets
+- rotate (maybe zoom? given software/lib) on models, reveal 2d slices based on angle/start or something else, display on separate screen
+- save 3d objects for later use and inspection instead of having to make a new one every time
+
+short term:
+- consider using imap and tweaking chunksize arg to optimize performance
+- start using PyOpenGL to do 3D modeling and even to improve fractal rendering
 
 '''
