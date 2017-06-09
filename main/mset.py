@@ -1,10 +1,17 @@
-#!usr/bin/python
+#!/usr/bin/python
+
+''' 2D RENDERING OF MSETS '''
+
 import math, sys, cmath
 import numpy as np
-import pylab as py
+import mayavi as my
 import multiprocessing
 import time
 import sys
+
+sys.path.insert(0, '/Users/felipe_campos/Library/Python/2.7/lib/python/site-packages')
+import pylab as py
+sys.path.remove('/Users/felipe_campos/Library/Python/2.7/lib/python/site-packages')
 
 np.set_printoptions(threshold=np.nan) # allows for printing entire np arrays
 
@@ -117,8 +124,6 @@ while True:
         break
     except ValueError:
         print("Invalid input, please try again.")
-
-info = multiprocessing.get_logger().info # return_arr resxy thing was here may come back?
 
 # color scheme prompt?
 
@@ -282,9 +287,10 @@ medium/long term:
 - while figuring out multithreading/processing and optimizing speed, work on 3d modeling of various Mandelbrot/Julia sets
 - rotate (maybe zoom? given software/lib) on models, reveal 2d slices based on angle/start or something else, display on separate screen
 - save 3d objects for later use and inspection instead of having to make a new one every time
+- figure out how to make julia sets and ish
 
 short term:
-- consider using imap and tweaking chunksize arg to optimize performance
-- start using PyOpenGL to do 3D modeling and even to improve fractal rendering
+- consider using imap and tweaking chunksize arg to optimize mp performance
+- start using PyOpenGL to do 3D modeling and possibly even to improve fractal rendering
 
 '''
