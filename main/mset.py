@@ -4,19 +4,26 @@
 
 import math, sys, cmath
 import numpy as np
-import mayavi as my
 import multiprocessing
 import time
+import os
 import sys
+
+from progressbar import ProgressBar
+pbar = ProgressBar()
 
 sys.path.insert(0, '/Users/felipe_campos/Library/Python/2.7/lib/python/site-packages')
 import pylab as py
 sys.path.remove('/Users/felipe_campos/Library/Python/2.7/lib/python/site-packages')
 
+sys.path.insert(0, '/Users/felipe_campos/anaconda/lib/python2.7/site-packages')
+import mayavi as my
+sys.path.remove('/Users/felipe_campos/anaconda/lib/python2.7/site-packages')
+
 np.set_printoptions(threshold=np.nan) # allows for printing entire np arrays
 
 path = "./"
-jules = False
+jules = True
 f_str = "z**2"
 esc_radius = 420.0
 bloc_n = 10
@@ -31,15 +38,15 @@ print('Please choose from one of the following functions:\n'
         '(3) f(z) = sin(z) + c\n'
         '(4) f(z) = cos(z) + c\n'
         '(5) f(z) = c*z*(1-z)\n'
-        '(6) Create your own equation')
+        '(6) f(z) = null_eqn')
 while True:
     try:
         temp = int(raw_input("Choose a number corresponding with your intended option (1-6): "))
         if temp == 6:
             f_str = "null"
-            esc_radius = 69.0
+            esc_radius = 420.0 # create eqn
         elif temp == 5:
-            f_str = "log"
+            f_str = "log_c"
             esc_radius = 50.0
         elif temp == 4:
             f_str = "cos"
@@ -58,6 +65,32 @@ while True:
         break
     except ValueError:
         print("Invalid response, please try again.")
+
+if f_str == "null":
+    while True:
+        try:
+            temp = float(raw_input("Specify an escape radius: "))
+            if temp > 0:
+                esc_radius = temp
+                break
+            else:
+                temp = int(spongebob)
+        except:
+            print("Invalid input, please try again.")
+
+while True:
+    try:
+        temp = raw_input("Would you like to plot a Mandelbrot or Julia set? [m/j]: ")
+        if temp == 'm':
+            jules = False
+            break
+        elif temp == 'j':
+            jules = True
+            break
+        else:
+            jules = int(spongebob)
+    except ValueError:
+        print("Invalid input, please try again.")
 
 init = -1
 while True:
@@ -93,7 +126,7 @@ while True:
     except ValueError:
         print("Invalid input, please try again.")
 
-res_xy = -1
+'''res_xy = -1
 print('Please choose from one of the following resolutions:\n'
         '(1) 10x10\n'
         '(2) 100x100\n'
@@ -106,7 +139,7 @@ while True:
     try:
         temp = int(raw_input("Choose a number corresponding with your intended option (1-7): "))
         if temp == 7:
-            res_xy = 25000
+            res_xy = 15000
         elif temp == 6:
             res_xy = 10000
         elif temp == 5:
@@ -122,6 +155,30 @@ while True:
         else:
             val = int(spongebob)
         break
+    except ValueError:
+        print("Invalid input, please try again.")'''
+
+res_x = -1
+while True:
+    try:
+        temp = int(raw_input("What do you want the x resolution to be?: "))
+        if temp > 0:
+            res_x = temp
+            break
+        else:
+            res_x = int(spongebob)
+    except ValueError:
+        print("Invalid input, please try again.")
+
+res_y = -1
+while True:
+    try:
+        temp = int(raw_input("What do you want the y resolution to be?: "))
+        if temp > 0:
+            res_y = temp
+            break
+        else:
+            res_y = int(spongebob)
     except ValueError:
         print("Invalid input, please try again.")
 
@@ -145,12 +202,17 @@ def geom(func_str, z, c):
         np.cos(z,z)
         np.add(z, c, z)
         return z
-    elif func_str == "log":
+    elif func_str == "log_c":
         np.multiply(z, c, z)
         temp = np.zeros(z.shape, dtype = complex)
-        temp[temp==0] = 1 # TODO: may be able to just use (1-z)
+        temp[temp==0] = 1 # NOTE: may be able to just use (1-z)
         np.subtract(temp,z,temp)
         np.multiply(z,temp,z)
+        return z
+    elif func_str == "null":
+        np.sinc(z,z)
+        np.multiply(z,z,z)
+        # np.add(z,c,z)
         return z
 
 def blockshaped(arr, nrows, ncols):
@@ -184,12 +246,17 @@ def proc_handler(fn_str, f_name, seed, juul, iter_max, blocs, arr):
     pool = multiprocessing.Pool(processes=(multiprocessing.cpu_count()*2))
     data = []
 
+    '''if jules == True: seed = juul'''
+
     i = 0
     for bloc in blocs:
-        data.append((i, bloc, fn_str, f_name, seed, juul, iter_max))
+        data.append((i, bloc, fn_str, f_name, seed, iter_max))
         i += 1
 
-    results = pool.map(proc, data)
+    if jules == False:
+        results = pool.map(procm, data)
+    else:
+        results = pool.map(procj, data)
 
     del bloc, data # save some memory
 
@@ -198,7 +265,7 @@ def proc_handler(fn_str, f_name, seed, juul, iter_max, blocs, arr):
 
     return arr
 
-def proc((procnum, c, fn_str, f_name, seed, juul, iter_max)):
+def procm((procnum, c, fn_str, f_name, seed, iter_max)):
 
     res = c.shape
 
@@ -229,6 +296,46 @@ def proc((procnum, c, fn_str, f_name, seed, juul, iter_max)):
         c = c[rem]
 
     del gx, gy, c # save some memory
+
+    m_arr[m_arr==0] = iter_max
+    # m_arr[m_arr!=iter_max] = 0
+    result = (m_arr, procnum)
+
+    del m_arr # save some memory
+
+    return result
+
+def procj((procnum, c, fn_str, f_name, seed, iter_max)):
+
+    res = c.shape
+
+    gx, gy = np.mgrid[0:res[0], 0:res[1]] # make grid
+
+    m_arr = np.zeros(c.shape, dtype = int) # initialize mandelbrot array
+
+    # flatten out np arrays
+    gx.shape = res[0]*res[1]
+    gy.shape = res[0]*res[1]
+    c.shape = res[0]*res[1]
+
+    zinit = np.zeros(c.shape, dtype = complex)
+    zinit[zinit==0] = seed
+
+    z = geom(fn_str, c, zinit) # initial iteration
+
+    del c # save some memory
+
+    for i in xrange(iter_max):
+        if not len(z): break
+        z = geom(fn_str, z, zinit)
+        rem = abs(z) > esc_radius # escaped points condition
+        m_arr[gx[rem], gy[rem]] = i+1 # record iteration count for escaped points
+        rem = -rem # prisoner (non-escaped) points condition
+        z = z[rem]
+        gx, gy = gx[rem], gy[rem]
+        zinit = zinit[rem]
+
+    del gx, gy, zinit # save some memory
 
     m_arr[m_arr==0] = iter_max
 
@@ -275,22 +382,12 @@ def mandel(fn_str, f_name, seed = 0, juul = 0, res = (4000,4000), xrng = (-2.2,0
 
     img = py.imshow(m_arr.T, origin='lower left', cmap = 'jet')
     img.write_png(f_name, noscale=True)
+    os.system("open mandel_render.png")
 
     m_arr = None
 
 if __name__ == '__main__':
-    mandel(f_str, "mandel_render.png", seed = init, res = (res_xy,res_xy), xrng = (x_0,x_1), yrng = (y_0,y_1), iter_max = iter_m)
+    for quadrant in xrange(1,4):
+        for theta in xrange(0,90):
 
-'''
-
-medium/long term:
-- while figuring out multithreading/processing and optimizing speed, work on 3d modeling of various Mandelbrot/Julia sets
-- rotate (maybe zoom? given software/lib) on models, reveal 2d slices based on angle/start or something else, display on separate screen
-- save 3d objects for later use and inspection instead of having to make a new one every time
-- figure out how to make julia sets and ish
-
-short term:
-- consider using imap and tweaking chunksize arg to optimize mp performance
-- start using PyOpenGL to do 3D modeling and possibly even to improve fractal rendering
-
-'''
+            mandel(f_str, "mandel_render.png", seed = init, res = (res_x,res_y), xrng = (x_0,x_1), yrng = (y_0,y_1), iter_max = iter_m)

@@ -4,15 +4,20 @@
 
 import math, sys, cmath
 import numpy as np
-from mayavi import mlab
+sys.path.insert(0, '/Users/felipe_campos/anaconda/lib/python2.7/site-packages')
+import mayavi as my
+from progressbar import ProgressBar
+sys.path.remove('/Users/felipe_campos/anaconda/lib/python2.7/site-packages')
 import multiprocessing
 import time
 
-from progressbar import ProgressBar
 pbar = ProgressBar()
 
 np.set_printoptions(threshold=np.nan) # allows for printing entire np arrays
 
+dim = 3
+
+iso = True
 path = "./"
 jules = False
 f_str = "z**2"
@@ -57,15 +62,31 @@ while True:
     except ValueError:
         print("Invalid response, please try again.")
 
-x_0 = x_1 = y_0 = y_1 = z_0 = z_1 = -1
+while True:
+    try:
+        temp = raw_input("Would you like to plot a Mandelbrot or Julia set? [m/j]: ")
+        if temp == 'm':
+            jules = False
+            break
+        elif temp == 'j':
+            jules = True
+            break
+        else:
+            jules = int(spongebob)
+    except ValueError:
+        print("Invalid input, please try again.")
+
+x_0 = x_1 = y_0 = y_1 = z_0 = z_c0 = z_1 = z_c1 = -1
 while True:
     try:
         x_0 = float(raw_input("Input xmin: "))
         x_1 = float(raw_input("Input xmax: "))
         y_0 = float(raw_input("Input ymin: "))
         y_1 = float(raw_input("Input ymax: "))
-        z_0 = float(raw_input("Input zmin: "))
-        z_1 = float(raw_input("Input zmax: "))
+        z_0 = float(raw_input("Input real zmin: "))
+        z_c0 = float(raw_input("Input complex zmin: "))
+        z_1 = float(raw_input("Input real zmax: "))
+        z_c1 = float(raw_input("Input complex zmax: "))
         break
     except ValueError:
         print("Invalid input, please try again.")
@@ -80,32 +101,27 @@ while True:
     except ValueError:
         print("Invalid input, please try again.")
 
-res_xy = -1
-print('Please choose from one of the following resolutions:\n'
-        '(1) 10x10\n'
-        '(2) 100x100\n'
-        '(3) 500x500\n'
-        '(4) 1000x1000\n'
-        '(5) 5000x5000\n'
-        '(6) 10000x10000')
+res_x = -1
 while True:
     try:
-        temp = int(raw_input("Choose a number corresponding with your intended option (1-7): "))
-        if temp == 6:
-            res_xy = 10000
-        elif temp == 5:
-            res_xy = 5000
-        elif temp == 4:
-            res_xy = 1000
-        elif temp == 3:
-            res_xy = 500
-        elif temp == 2:
-            res_xy = 100
-        elif temp == 1:
-            res_xy = 10
+        temp = int(raw_input("Input a positive integer indicating the resolution of the x-axis: "))
+        if temp > 0:
+            res_x = int(temp)
+            break
         else:
-            val = int(spongebob)
-        break
+            res_x = int(spongebob)
+    except ValueError:
+        print("Invalid input, please try again.")
+
+res_y = -1
+while True:
+    try:
+        temp = int(raw_input("Input a positive integer indicating the resolution of the y-axis: "))
+        if temp > 0:
+            res_y = int(temp)
+            break
+        else:
+            res_y = int(spongebob)
     except ValueError:
         print("Invalid input, please try again.")
 
@@ -118,6 +134,20 @@ while True:
             break
         else:
             res_z = int(spongebob)
+    except ValueError:
+        print("Invalid input, please try again.")
+
+while True:
+    try:
+        temp = raw_input("Plot iso-surface or voxel object? [i/v]: ")
+        if temp == 'i':
+            iso = True
+            break
+        elif temp == 'v':
+            iso = False
+            break
+        else:
+            iso = int(spongebob)
     except ValueError:
         print("Invalid input, please try again.")
 
@@ -180,12 +210,17 @@ def proc_handler(fn_str, seed, juul, iter_max, blocs, arr):
     pool = multiprocessing.Pool(processes=(multiprocessing.cpu_count()*2))
     data = []
 
+    '''if jules == True: seed = juul'''
+
     i = 0
     for bloc in blocs:
-        data.append((i, bloc, fn_str, seed, juul, iter_max))
+        data.append((i, bloc, fn_str, seed, iter_max))
         i += 1
 
-    results = pool.map(proc, data)
+    if jules == False:
+        results = pool.map(procm, data)
+    else:
+        results = pool.map(procj, data)
 
     pool.close()
     pool.join()
@@ -197,7 +232,7 @@ def proc_handler(fn_str, seed, juul, iter_max, blocs, arr):
 
     return arr
 
-def proc((procnum, c, fn_str, seed, juul, iter_max)):
+def procm((procnum, c, fn_str, seed, iter_max)):
 
     res = c.shape
 
@@ -228,6 +263,46 @@ def proc((procnum, c, fn_str, seed, juul, iter_max)):
         c = c[rem]
 
     del gx, gy, c # save some memory
+
+    m_arr[m_arr==0] = iter_max
+
+    result = (m_arr, procnum)
+
+    del m_arr # save some memory
+
+    return result
+
+def procj((procnum, c, fn_str, seed, iter_max)):
+
+    res = c.shape
+
+    gx, gy = np.mgrid[0:res[0], 0:res[1]] # make grid
+
+    m_arr = np.zeros(c.shape, dtype = int) # initialize mandelbrot array
+
+    # flatten out np arrays
+    gx.shape = res[0]*res[1]
+    gy.shape = res[0]*res[1]
+    c.shape = res[0]*res[1]
+
+    zinit = np.zeros(c.shape, dtype = complex)
+    zinit[zinit==0] = seed
+
+    z = geom(fn_str, c, zinit) # initial iteration
+
+    del c # save some memory
+
+    for i in xrange(iter_max):
+        if not len(z): break
+        z = geom(fn_str, z, zinit)
+        rem = abs(z) > esc_radius # escaped points condition
+        m_arr[gx[rem], gy[rem]] = i+1 # record iteration count for escaped points
+        rem = -rem # prisoner (non-escaped) points condition
+        z = z[rem]
+        gx, gy = gx[rem], gy[rem]
+        zinit = zinit[rem]
+
+    del gx, gy, zinit # save some memory
 
     m_arr[m_arr==0] = iter_max
 
@@ -276,35 +351,34 @@ def mandel(fn_str, seed = 0, juul = 0, res = (4000,4000), xrng = (-2.2,0.8), yrn
 
 if __name__ == '__main__':
 
-    result = mandel(f_str, seed = z_0, res = (res_xy,res_xy), xrng = (x_0,x_1), yrng = (y_0,y_1), iter_max = iter_m)
+    result = mandel(f_str, seed = complex(z_0, 0), res = (res_x,res_y), xrng = (x_0,x_1), yrng = (y_0,y_1), iter_max = iter_m)
 
-    step_z = (z_1 - z_0) / float(res_z)
-    seed = np.linspace(z_0 + step_z, z_1, num=res_xy)
+    if dim == 3:
+        step_z = (z_1 - z_0) / float(res_z)
+        seed = np.linspace(z_0 + step_z, z_1, num=res_z)
 
-    for seed_i in pbar(seed):
-        res = mandel(f_str, seed = seed_i, res = (res_xy,res_xy), xrng = (x_0,x_1), yrng = (y_0,y_1), iter_max = iter_m)
-        result = np.dstack((result, res))
+        for seed_i in pbar(seed):
+            res = mandel(f_str, seed = complex(seed_i, 0), res = (res_x,res_y), xrng = (x_0,x_1), yrng = (y_0,y_1), iter_max = iter_m)
+            result = np.dstack((result, res))
 
-    mlab.contour3d(result)
+        if iso == True:
+            mlab.contour3d(result)
+        else:
+            mlab.pipeline.volume(mlab.pipeline.scalar_field(result))
+    else:
+        mlab.surf(result)
+
     mlab.show()
 
 '''
 
 medium/long term:
-- while figuring out multithreading/processing and optimizing speed, work on 3d modeling of various Mandelbrot/Julia sets
 - rotate (maybe zoom? given software/lib) on models, reveal 2d slices based on angle/start or something else, display on separate screen
 - save 3d objects for later use and inspection instead of having to make a new one every time
-- figure out how to make julia sets and ish
 - maybe use 3d nparrays instead of layers
 
 short term:
 - consider using imap and tweaking chunksize arg to optimize mp performance
-- start using PyOpenGL to do 3D modeling and possibly even to improve fractal rendering
-- use mayavi to handle all that ish
-
-plan (TODO)
-make 2d slices of the 3d shape in like 500x500 resolution or something small like that
-concatenate those arrays somehow (see links in bookmarks bar)
-feed that array to a mayavi function that outputs some 3d representation (preferably a GL object or 3d object)
+- display image of Mandelbrot set for specific function when choosing Julia set (especially for animation) --> take user input on image
 
 '''
