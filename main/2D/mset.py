@@ -26,14 +26,10 @@ parser.add_argument("--y0", type=float, help='window y0', required=False)
 parser.add_argument("--y1", type=float, help='window y1', required=False)
 parser.add_argument("--xres", type=int, help='window x resolution', required=False)
 parser.add_argument("-f", "--frames", type=int, help='number of frames to generate', required=False)
-parser.add_argument("-s", "--scale", type=float, help='zoom scale', required=False)
 parser.add_argument("--func", type=str, help='the function defining the IFS', required=False)
 parser.add_argument("--type", type=str, help='m (mandelbrot) or j (julia)', required=False)
 parser.add_argument("-r", type=float, help='real component of the seed', required=False)
 parser.add_argument("-c", type=float, help='complex component of the seed', required=False)
-parser.add_argument("--ix", type=float, help='real component to zoom in on', required=False)
-parser.add_argument("--iy", type=float, help='complex component to zoom in on', required=False)
-parser.add_argument("--show", action='store_true', help='show image for zoom point selection')
 
 # parser.add_argument("-t", "--testing", action='store_true', help='a testing flag for visualization')
 args = parser.parse_args()
@@ -149,17 +145,6 @@ if args.frames is None:
         except ValueError:
             print("Invalid input, please try again.")
 
-scale = args.scale
-if args.scale is None:
-    while True:
-        try:
-            scale = int(input("Input zoom scale: "))
-            if iter_m < 1:
-                scale = int(spongebob)
-            break
-        except ValueError:
-            print("Invalid input, please try again.")
-
 res_x = args.xres
 if args.xres is None:
     while True:
@@ -174,29 +159,9 @@ if args.xres is None:
             print("Invalid input, please try again.")
 res_y = int(res_x * float(y_range) / float(x_range))
 
-ix, iy = args.ix, args.iy
 if __name__ == '__main__':
     my_cmap = ListedColormap(sns.color_palette("cubehelix", 8))
-    base, p = 50, 5
-
-    if args.show or args.ix is None or args.iy is None:
-        f = plt.figure()
-        a = f.add_subplot(1,1,1)
-
-        a.imshow(mandel(0, f_str, seed = np.complex128(init_r+init_c*1j), res = (res_x,res_y),
-            xrng = (x_0,x_1), yrng = (y_0,y_1), iter_max = base+int(math.log10(((float(y_range)/x_range)))**p),
-            julia = jules, esc_radius = esc_radius), cmap=my_cmap)
-
-        def on_click(event):
-            global ix, iy
-            ix, iy = (event.xdata / float(res_x)) * x_range + x_0, (event.ydata / float(res_y))  * y_range + y_0
-
-            print("Center is (real: " + str(ix) + ", complex: " + str(iy) + ")")
-            plt.close(f)
-
-        cid = f.canvas.mpl_connect('button_press_event', on_click)
-
-        plt.show(f)
+    base = 1
 
     fig = plt.figure()
     ax = fig.add_subplot(1,1,1)
@@ -204,8 +169,6 @@ if __name__ == '__main__':
     fig.set_tight_layout(True)
     ax.get_xaxis().set_visible(False)
     ax.get_yaxis().set_visible(False)
-
-    center = (float(ix), float(iy))
 
     print("Entering GIF creation")
     print("Generating data")
@@ -216,30 +179,25 @@ if __name__ == '__main__':
 
     all_data = [mandel(0, f_str, seed = np.complex128(init_r+init_c*1j),
         res = (res_x,res_y), xrng = (x_0,x_1), yrng = (y_0,y_1),
-        iter_max = base+int(math.log10(((float(y_range)/x_range)))**p), julia = jules, esc_radius = esc_radius)]
+        iter_max = base, julia = jules, esc_radius = esc_radius)]
     for i in range(1, frames+1):
-        x_range = x_range / float(scale)
-        y_range = x_range / float(scale)
-        x_0, x_1 = center[0] - (x_range / 2.0), center[0] + (x_range / 2.0)
-        y_0, y_1 = center[1] - (y_range / 2.0), center[1] + (y_range / 2.0)
-
         # TODO: every once in a while, find brightest set of pixels in image (max pooling) and zoom in there
 
+        data = mandel(i, f_str, seed = np.complex128(init_r+init_c*1j), res = (res_x,res_y),
+            xrng = (x_0,x_1), yrng = (y_0,y_1), iter_max = base+i,
+            julia = jules, esc_radius = esc_radius)
+
+        # while avg value in data is below some threshold, recalculate with lower iter_max
+
         all_data.append(mandel(i, f_str, seed = np.complex128(init_r+init_c*1j), res = (res_x,res_y),
-            xrng = (x_0,x_1), yrng = (y_0,y_1), iter_max = base+int(math.log10(((float(y_range)/x_range)))**p),
+            xrng = (x_0,x_1), yrng = (y_0,y_1), iter_max = base+i,
             julia = jules, esc_radius = esc_radius))
 
-        bar.update(i)
-
-    bar.finish()
+        bar.update(i-1)
 
     print("Saving GIF...")
 
-    time.sleep(2)
-
-    bar = progressbar.ProgressBar(maxval=frames, \
-        widgets=[progressbar.Bar('=', '[', ']'), ' ', progressbar.Percentage(), ' ', progressbar.ETA()])
-    bar.start()
+    bar.update(0)
 
     def update_image(i, b = bar):
         """Returns updated ax"""
@@ -247,10 +205,10 @@ if __name__ == '__main__':
         b.update(i)
         return ax
     ani = animation.FuncAnimation(fig, lambda x: update_image(x), \
-            frames=np.arange(0, frames), interval=10)
+            frames=np.arange(0, frames), interval=1)
 
     bar.finish()
 
-    ani.save("mandelbrot.gif", writer='imagemagick', dpi=100)
+    ani.save("mandelbrot.gif", writer='imagemagick', dpi=100, fps=30)
 
     print('Done!')
