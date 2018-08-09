@@ -33,7 +33,6 @@ parser.add_argument("-r", type=float, help='real component of the seed', require
 parser.add_argument("-c", type=float, help='complex component of the seed', required=False)
 parser.add_argument("--ix", type=float, help='real component to zoom in on', required=False)
 parser.add_argument("--iy", type=float, help='complex component to zoom in on', required=False)
-parser.add_argument("--show", action='store_true', help='show image for zoom point selection')
 
 # parser.add_argument("-t", "--testing", action='store_true', help='a testing flag for visualization')
 args = parser.parse_args()
@@ -135,15 +134,13 @@ if args.x0 is None or args.x1 is None or args.y0 is None or args.y1 is None:
             break
         except ValueError:
             print("Invalid input, please try again.")
-x_range = x_1 - x_0
-y_range = y_1 - y_0
 
 frames = args.frames
 if args.frames is None:
     while True:
         try:
             frames = int(input("Input number of frames: "))
-            if iter_m < 1:
+            if frames < 1:
                 frames = int(spongebob)
             break
         except ValueError:
@@ -154,7 +151,7 @@ if args.scale is None:
     while True:
         try:
             scale = int(input("Input zoom scale: "))
-            if iter_m < 1:
+            if scale < 0:
                 scale = int(spongebob)
             break
         except ValueError:
@@ -172,85 +169,10 @@ if args.xres is None:
                 res_x = int(spongebob)
         except ValueError:
             print("Invalid input, please try again.")
+x_range = x_1 - x_0
+y_range = y_1 - y_0
 res_y = int(res_x * float(y_range) / float(x_range))
 
 ix, iy = args.ix, args.iy
 if __name__ == '__main__':
-    my_cmap = ListedColormap(sns.color_palette("cubehelix", 8))
-    base, p = 50, 5
-
-    if args.show or args.ix is None or args.iy is None:
-        f = plt.figure()
-        a = f.add_subplot(1,1,1)
-
-        a.imshow(mandel(0, f_str, seed = np.complex128(init_r+init_c*1j), res = (res_x,res_y),
-            xrng = (x_0,x_1), yrng = (y_0,y_1), iter_max = base+int(math.log10(((float(y_range)/x_range)))**p),
-            julia = jules, esc_radius = esc_radius), cmap=my_cmap)
-
-        def on_click(event):
-            global ix, iy
-            ix, iy = (event.xdata / float(res_x)) * x_range + x_0, (event.ydata / float(res_y))  * y_range + y_0
-
-            print("Center is (real: " + str(ix) + ", complex: " + str(iy) + ")")
-            plt.close(f)
-
-        cid = f.canvas.mpl_connect('button_press_event', on_click)
-
-        plt.show(f)
-
-    fig = plt.figure()
-    ax = fig.add_subplot(1,1,1)
-
-    fig.set_tight_layout(True)
-    ax.get_xaxis().set_visible(False)
-    ax.get_yaxis().set_visible(False)
-
-    center = (float(ix), float(iy))
-
-    print("Entering GIF creation")
-    print("Generating data")
-
-    bar = progressbar.ProgressBar(maxval=frames, \
-        widgets=[progressbar.Bar('=', '[', ']'), ' ', progressbar.Percentage(), ' ', progressbar.ETA()])
-    bar.start()
-
-    all_data = [mandel(0, f_str, seed = np.complex128(init_r+init_c*1j),
-        res = (res_x,res_y), xrng = (x_0,x_1), yrng = (y_0,y_1),
-        iter_max = base+int(math.log10(((float(y_range)/x_range)))**p), julia = jules, esc_radius = esc_radius)]
-    for i in range(1, frames+1):
-        x_range = x_range / float(scale)
-        y_range = x_range / float(scale)
-        x_0, x_1 = center[0] - (x_range / 2.0), center[0] + (x_range / 2.0)
-        y_0, y_1 = center[1] - (y_range / 2.0), center[1] + (y_range / 2.0)
-
-        # TODO: every once in a while, find brightest set of pixels in image (max pooling) and zoom in there
-
-        all_data.append(mandel(i, f_str, seed = np.complex128(init_r+init_c*1j), res = (res_x,res_y),
-            xrng = (x_0,x_1), yrng = (y_0,y_1), iter_max = base+int(math.log10(((float(y_range)/x_range)))**p),
-            julia = jules, esc_radius = esc_radius))
-
-        bar.update(i)
-
-    bar.finish()
-
-    print("Saving GIF...")
-
-    time.sleep(2)
-
-    bar = progressbar.ProgressBar(maxval=frames, \
-        widgets=[progressbar.Bar('=', '[', ']'), ' ', progressbar.Percentage(), ' ', progressbar.ETA()])
-    bar.start()
-
-    def update_image(i, b = bar):
-        """Returns updated ax"""
-        ax.imshow(all_data[i], cmap=my_cmap)
-        b.update(i)
-        return ax
-    ani = animation.FuncAnimation(fig, lambda x: update_image(x), \
-            frames=np.arange(0, frames), interval=10)
-
-    bar.finish()
-
-    ani.save("mandelbrot.gif", writer='imagemagick', dpi=100)
-
-    print('Done!')
+    zoom(x_0, x_1, y_0, y_1, res_x, res_y, scale, frames, jules, esc_radius, f_str, ix, iy, init_r, init_c)

@@ -1,5 +1,24 @@
 import multiprocessing, time
+import math, cmath
 import numpy as np
+import seaborn as sns
+
+pbar = False
+try:
+    import progressbar
+    pbar = True
+except:
+    pass
+
+import matplotlib.pyplot as plt
+from matplotlib import animation
+from matplotlib.colors import ListedColormap
+
+def getMaxInImage(a):
+    return np.unravel_index(a.argmax(), a.shape)
+
+def pixToCoor(pixCoors, x_res, y_res, x_range, y_range, x_0, y_0):
+    return (pixCoors[0] / float(x_res)) * x_range + x_0, (pixCoors[1] / float(y_res))  * y_range + y_0
 
 # takes array input, performs operations based on chosen function, returns array
 def geom(func_str, z, c, n=2):
@@ -214,3 +233,94 @@ def mandel(i, fn_str, julia = False, seed = 0, juul = 0, res = (4000,4000),
     # print('Time taken: ' + str(time.time()-start))
 
     return m_arr.T
+
+ix, iy = 0, 0
+images = []
+def zoom(x_0, x_1, y_0, y_1, res_x, res_y, scale, frames, jules, esc_radius, f_str, _ix, _iy, init_r, init_c):
+    my_cmap = ListedColormap(sns.color_palette("cubehelix", 8))
+    base, p = 250, 10
+
+    def click_figure(depth, x_0 = x_0, x_1 = x_1, y_0 = y_0, y_1 = y_1, _ix = _ix, _iy = _iy, \
+                    init_r = init_r, init_c = init_c, base = base, p = p, my_cmap = my_cmap):
+        global ix
+        global iy
+        global images
+
+        ix = _ix
+        iy = _iy
+
+        x_range = x_1 - x_0
+        y_range = y_1 - y_0
+
+        f = plt.figure()
+        ax = f.add_subplot(1,1,1)
+
+        f.set_tight_layout(True)
+        ax.get_xaxis().set_visible(False)
+        ax.get_yaxis().set_visible(False)
+
+        ax.imshow(mandel(0, f_str, seed = np.complex128(init_r+init_c*1j), res = (res_x,res_y),
+            xrng = (x_0,x_1), yrng = (y_0,y_1), iter_max = base+int(math.log10(((float(y_range)/x_range)))**p),
+            julia = jules, esc_radius = esc_radius), cmap=my_cmap)
+
+        def on_click(event):
+            global ix
+            global iy
+            ix, iy = pixToCoor((event.xdata, event.ydata), res_x, res_y, x_range, y_range, x_0, y_0)
+
+            print("Zooming on (real: " + str(ix) + ", complex: " + str(iy) + ")")
+            plt.close(f)
+
+        cid = f.canvas.mpl_connect('button_press_event', on_click)
+
+        plt.show(f)
+
+        bar = progressbar.ProgressBar(maxval=depth, \
+                    widgets=[progressbar.Bar('=', '[', ']'), ' ', progressbar.Percentage(), ' ', progressbar.ETA()])
+        bar.start()
+
+        center = (float(ix), float(iy))
+
+        images = []
+        for i in range(1, depth+1):
+            x_range = x_range / float(scale)
+            y_range = x_range / float(scale)
+            x_0, x_1 = center[0] - (x_range / 2.0), center[0] + (x_range / 2.0)
+            y_0, y_1 = center[1] - (y_range / 2.0), center[1] + (y_range / 2.0)
+
+            # TODO: every once in a while, find brightest set of pixels in image (max pooling) and zoom in there
+
+            data = mandel(i, f_str, seed = np.complex128(init_r+init_c*1j), res = (res_x,res_y),
+                xrng = (x_0,x_1), yrng = (y_0,y_1), iter_max = base,#+int(math.log10(((4.0/float(y_range))))**p),
+                julia = jules, esc_radius = esc_radius)
+
+            images.append(data)
+            bar.update(i)
+
+        bar.finish()
+
+        input("Calculated zoom, hit any key to render.")
+
+        print("Rendering...")
+
+        fig = plt.figure()
+        ax = fig.add_subplot(1,1,1)
+
+        fig.set_tight_layout(True)
+        ax.get_xaxis().set_visible(False)
+        ax.get_yaxis().set_visible(False)
+
+        im = ax.imshow(images[0], cmap=my_cmap)
+        def update_image(i):
+            """Returns updated ax"""
+            im.set_data(images[i])
+            fig.canvas.draw()
+            return ax
+
+        ani = animation.FuncAnimation(fig, lambda x: update_image(x), \
+                frames=np.arange(0, depth), interval=10, repeat=False)
+
+        plt.show(fig)
+
+    click_figure(frames, x_0 = x_0, x_1 = x_1, y_0 = y_0, y_1 = y_1, _ix = _ix, _iy = _iy, \
+                init_r = init_r, init_c = init_c, base = base, p = p, my_cmap = my_cmap)
